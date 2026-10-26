@@ -1,6 +1,6 @@
 """
 Utility functions for IMDb Sentiment Analysis:
-- clean_text: regex-based normalization matching training format with slang/rating mapping
+- clean_text: regex-based normalization matching training format with slang, typo, and rating mapping
 - is_valid_review: checks if text contains evaluatable words
 - calculate_stars: probabilistic mapping from positive sentiment to 1-5 star ratings
 """
@@ -9,8 +9,21 @@ import re
 from typing import Dict, Any
 
 
-# Rating score shorthands
-RATING_SHORTHANDS = [
+# Common review typos mapped to correct in-vocabulary forms
+TYPO_MAP = [
+    (r'\brecc?omm?end(ed|ing|s)?\b', r'recommend\1'),
+    (r'\bdiss?app?oint(ed|ing|ment|ments)?\b', r'disappoint\1'),
+    (r'\bhor+ib+le\b', 'horrible'),
+    (r'\bter+ib+le\b', 'terrible'),
+    (r'\bmasterpeice\b', 'masterpiece'),
+    (r'\bdef[ia]n[ia]tely\b', 'definitely'),
+    (r'\bexcel+ent\b', 'excellent'),
+    (r'\bunwatchible\b', 'unwatchable'),
+    (r'\bborring\b', 'boring'),
+]
+
+# Rating score shorthands preserved before numbers are stripped
+RATING_MAP = [
     (r'\b10\s*/\s*10\b', 'masterpiece perfect'),
     (r'\b9\s*/\s*10\b', 'excellent wonderful'),
     (r'\b8\s*/\s*10\b', 'very good enjoyable'),
@@ -28,26 +41,30 @@ RATING_SHORTHANDS = [
 ]
 
 # Slang and vulgarity mapping to in-vocabulary semantic synonyms
-SLANG_MAP = {
-    r'\bdogshit\b': 'terrible crap',
-    r'\bbullshit\b': 'garbage crap',
-    r'\bhorseshit\b': 'terrible crap',
-    r'\bbatshit\b': 'crazy terrible',
-    r'\bdipshit\b': 'idiot',
-    r'\bpiece of shit\b': 'terrible garbage',
-    r'\bshitty\b': 'terrible',
-    r'\bshittiest\b': 'worst',
-    r'\bshit\b': 'crap',
-    r'\bfuck\b': 'terrible',
-    r'\bfucking\b': 'extremely',
-    r'\bfucked\b': 'ruined terrible',
-    r'\bsux\b': 'sucks',
-    r'\bsuck\b': 'sucks',
-    r'\bcrappy\b': 'crap',
-    r'\btrashy\b': 'trash',
-    r'\bdumpster fire\b': 'disaster disaster',
-    r'\bpoop\b': 'crap',
-}
+PHRASE_MAP = [
+    (r'\bcash\s*grab\b', 'waste rip off'),
+    (r'\bmoney\s*grab\b', 'waste rip off'),
+    (r'\bsoull?ess?\b', 'terrible lifeless'),
+    (r'\bdogshit\b', 'terrible crap'),
+    (r'\bbullshit\b', 'garbage crap'),
+    (r'\bhorseshit\b', 'terrible crap'),
+    (r'\bbatshit\b', 'crazy terrible'),
+    (r'\bdipshit\b', 'idiot'),
+    (r'\bpiece of shit\b', 'terrible garbage'),
+    (r'\bshitty\b', 'terrible'),
+    (r'\bshittiest\b', 'worst'),
+    (r'\bshit\b', 'crap'),
+    (r'\bfuck\b', 'terrible'),
+    (r'\bfucking\b', 'extremely'),
+    (r'\bfucked\b', 'ruined terrible'),
+    (r'\bsux\b', 'sucks'),
+    (r'\bsuck\b', 'sucks'),
+    (r'\bcrappy\b', 'crap'),
+    (r'\btrashy\b', 'trash'),
+    (r'\bdumpster fire\b', 'disaster disaster'),
+    (r'\bpoop\b', 'crap'),
+    (r'\brip\s*off\b', 'waste rip off'),
+]
 
 CONTRACTIONS = {
     r"won\'t": "will not", r"can\'t": "cannot", r"n\'t": " not",
@@ -60,27 +77,36 @@ def clean_text(text: str) -> str:
     """
     Preprocesses input text for sentiment analysis:
     1. Strips HTML tags and URLs
-    2. Maps numeric ratings (e.g. '10/10', '1/10') to semantic sentiment tokens
-    3. Maps vulgarity / internet slang to in-vocabulary equivalents (e.g. 'dogshit' -> 'terrible crap')
-    4. Expands negation contractions (e.g. "don't" -> "do not")
-    5. Normalizes to lowercase letters and single spaces
+    2. Separates punctuation touching letters (e.g. 'series,would' -> 'series, would')
+    3. Maps numeric ratings (e.g. '10/10', '1/10') to semantic sentiment tokens
+    4. Fixes common review typos (e.g. 'reccomend' -> 'recommend')
+    5. Maps vulgarity / internet slang to in-vocabulary equivalents (e.g. 'dogshit' -> 'terrible crap')
+    6. Expands negation contractions (e.g. "don't" -> "do not")
+    7. Normalizes to lowercase letters and single spaces
     """
     text = re.sub(r'<.*?>', ' ', text)
     text = re.sub(r'https?://\S+|www\.\S+', ' ', text)
 
-    # 1. Rating shorthands (preserve rating meaning before numbers are stripped)
-    for pattern, replacement in RATING_SHORTHANDS:
+    # Separate punctuation attached to words
+    text = re.sub(r'([a-zA-Z]),([a-zA-Z])', r'\1, \2', text)
+
+    # 1. Rating score shorthands
+    for pattern, replacement in RATING_MAP:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
-    # 2. Slang & vulgarity normalization
-    for pattern, replacement in SLANG_MAP.items():
+    # 2. Review typo corrections
+    for pattern, replacement in TYPO_MAP:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
-    # 3. Contraction expansion (preserves negations like "not")
+    # 3. Slang & vulgarity normalization
+    for pattern, replacement in PHRASE_MAP:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    # 4. Contraction expansion (preserves negations like "not")
     for contraction, replacement in CONTRACTIONS.items():
         text = re.sub(contraction, replacement, text, flags=re.IGNORECASE)
 
-    # 4. Lowercase and keep letters only
+    # 5. Lowercase and keep letters only
     text = text.lower()
     text = re.sub(r'[^a-z\s]', ' ', text)
     return re.sub(r'\s+', ' ', text).strip()

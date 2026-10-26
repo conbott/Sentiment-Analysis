@@ -164,3 +164,17 @@ def test_rating_shorthands():
         assert resp_neg.status_code == 200
         assert resp_neg.json()["sentiment"] == "Negative"
         assert resp_neg.json()["stars"] == 1
+
+
+def test_complex_contrastive_review():
+    with TestClient(app) as client:
+        review_text = (
+            "the animation was fantastic which was the source material for the netflix series, "
+            "but they made this into a soulles cash grab of a horrendous series,would not reccomend"
+        )
+        resp = client.post("/predict", json={"review": review_text})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sentiment"] == "Negative"
+        assert data["stars"] == 1
+        assert data["confidence_percentage"] >= 90.0
