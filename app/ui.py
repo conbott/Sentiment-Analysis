@@ -17,9 +17,9 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 try:
-    from app.utils import clean_text, calculate_stars
+    from app.utils import clean_text, calculate_stars, is_valid_review
 except ModuleNotFoundError:
-    from utils import clean_text, calculate_stars
+    from utils import clean_text, calculate_stars, is_valid_review
 
 MODEL_PATH = os.path.join(BASE_DIR, "models", "sentiment_pipeline.joblib")
 
@@ -147,67 +147,72 @@ with tab1:
 
     with col2:
         st.subheader("Prediction Result")
-        if analyze_clicked and review_input.strip() and pipeline is not None:
-            cleaned = clean_text(review_input)
-            pred_label = int(pipeline.predict([cleaned])[0])
-            probs = pipeline.predict_proba([cleaned])[0]
-            prob_neg = float(probs[0])
-            prob_pos = float(probs[1])
-            
-            is_pos = (pred_label == 1)
-            confidence = (prob_pos if is_pos else prob_neg) * 100
-            star_info = calculate_stars(prob_pos)
-            
-            # 1. Sentiment Banner Card
-            if is_pos:
-                st.markdown(f"""
-                <div class='positive-card'>
-                    <h2 style='margin:0; color:#065F46;'>POSITIVE SENTIMENT</h2>
-                    <p style='font-size:1.15rem; margin-top:0.4rem;'>Confidence: <b>{confidence:.2f}%</b></p>
-                </div>
-                """, unsafe_allow_html=True)
+        if analyze_clicked and pipeline is not None:
+            raw_text = review_input.strip()
+            if not raw_text:
+                st.warning("Please type or select a review to analyze.")
             else:
-                st.markdown(f"""
-                <div class='negative-card'>
-                    <h2 style='margin:0; color:#991B1B;'>NEGATIVE SENTIMENT</h2>
-                    <p style='font-size:1.15rem; margin-top:0.4rem;'>Confidence: <b>{confidence:.2f}%</b></p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # 2. Star Rating Card
-            filled_stars = "<span style='color: #F59E0B;'>★</span>" * star_info['stars']
-            empty_stars = "<span style='color: #D1D5DB;'>☆</span>" * (5 - star_info['stars'])
-            stars_html = filled_stars + empty_stars
-            
-            st.markdown(f"""
-            <div class='rating-card'>
-                <div style='display:flex; justify-content:space-between; align-items:center;'>
-                    <div>
-                        <div style='font-size:0.75rem; font-weight:700; color:#B45309; text-transform:uppercase; letter-spacing:0.05em;'>ESTIMATED STAR RATING</div>
-                        <div style='margin-top:2px;'>
-                            <span style='font-size:1.8rem; letter-spacing:2px;'>{stars_html}</span>
-                            <span style='font-size:1.2rem; font-weight:700; color:#1F2937; margin-left:8px;'>{star_info['stars']} / 5 Stars</span>
+                cleaned = clean_text(raw_text)
+                if not cleaned or len(cleaned.split()) == 0:
+                    st.warning("⚠️ **No valid words or sentiment detected.** Numbers, symbols, and punctuation alone do not convey sentiment. Please write a review containing actual words.")
+                else:
+                    pred_label = int(pipeline.predict([cleaned])[0])
+                    probs = pipeline.predict_proba([cleaned])[0]
+                    prob_neg = float(probs[0])
+                    prob_pos = float(probs[1])
+                    
+                    is_pos = (pred_label == 1)
+                    confidence = (prob_pos if is_pos else prob_neg) * 100
+                    star_info = calculate_stars(prob_pos)
+                    
+                    # 1. Sentiment Banner Card
+                    if is_pos:
+                        st.markdown(f"""
+                        <div class='positive-card'>
+                            <h2 style='margin:0; color:#065F46;'>POSITIVE SENTIMENT</h2>
+                            <p style='font-size:1.15rem; margin-top:0.4rem;'>Confidence: <b>{confidence:.2f}%</b></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class='negative-card'>
+                            <h2 style='margin:0; color:#991B1B;'>NEGATIVE SENTIMENT</h2>
+                            <p style='font-size:1.15rem; margin-top:0.4rem;'>Confidence: <b>{confidence:.2f}%</b></p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # 2. Star Rating Card
+                    filled_stars = "<span style='color: #F59E0B;'>★</span>" * star_info['stars']
+                    empty_stars = "<span style='color: #D1D5DB;'>☆</span>" * (5 - star_info['stars'])
+                    stars_html = filled_stars + empty_stars
+                    
+                    st.markdown(f"""
+                    <div class='rating-card'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <div>
+                                <div style='font-size:0.75rem; font-weight:700; color:#B45309; text-transform:uppercase; letter-spacing:0.05em;'>ESTIMATED STAR RATING</div>
+                                <div style='margin-top:2px;'>
+                                    <span style='font-size:1.8rem; letter-spacing:2px;'>{stars_html}</span>
+                                    <span style='font-size:1.2rem; font-weight:700; color:#1F2937; margin-left:8px;'>{star_info['stars']} / 5 Stars</span>
+                                </div>
+                            </div>
+                            <div style='text-align:right;'>
+                                <div style='font-size:1.4rem; font-weight:800; color:#D97706;'>{star_info['score']:.1f}<span style='font-size:0.85rem; color:#6B7280; font-weight:500;'> / 5.0</span></div>
+                                <div style='font-size:0.85rem; font-weight:600; color:#4B5563;'>{star_info['label']}</div>
+                            </div>
                         </div>
                     </div>
-                    <div style='text-align:right;'>
-                        <div style='font-size:1.4rem; font-weight:800; color:#D97706;'>{star_info['score']:.1f}<span style='font-size:0.85rem; color:#6B7280; font-weight:500;'> / 5.0</span></div>
-                        <div style='font-size:0.85rem; font-weight:600; color:#4B5563;'>{star_info['label']}</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-                
-            st.write("**Probability Breakdown:**")
-            st.progress(prob_pos, text=f"Positive Probability: {prob_pos*100:.1f}%")
-            st.progress(prob_neg, text=f"Negative Probability: {prob_neg*100:.1f}%")
-            
-            if confidence < min_confidence:
-                st.warning(f"Confidence is below {min_confidence}%. This review has mixed or subtle emotional cues.")
-                
-            with st.expander("View Preprocessed NLP Tokens"):
-                st.code(cleaned)
-        elif not review_input.strip() and analyze_clicked:
-            st.warning("Please type or select a review to analyze.")
+                    """, unsafe_allow_html=True)
+                        
+                    st.write("**Probability Breakdown:**")
+                    st.progress(prob_pos, text=f"Positive Probability: {prob_pos*100:.1f}%")
+                    st.progress(prob_neg, text=f"Negative Probability: {prob_neg*100:.1f}%")
+                    
+                    if confidence < min_confidence:
+                        st.warning(f"Confidence is below {min_confidence}%. This review has mixed or subtle emotional cues.")
+                        
+                    with st.expander("View Preprocessed NLP Tokens"):
+                        st.code(cleaned)
 
 
 # --- TAB 2: Batch Analysis ---
@@ -226,14 +231,34 @@ with tab2:
                 st.write(f"Loaded {len(batch_df)} rows. Processing predictions and star ratings...")
                 
                 cleaned_batch = batch_df['review'].astype(str).apply(clean_text)
-                batch_preds = pipeline.predict(cleaned_batch)
-                batch_probs = pipeline.predict_proba(cleaned_batch)
                 
-                batch_df['Predicted_Sentiment'] = ["Positive" if p == 1 else "Negative" for p in batch_preds]
+                batch_preds = []
+                batch_probs = []
+                star_results = []
+                
+                for c in cleaned_batch:
+                    if c and len(c.split()) > 0:
+                        p_label = int(pipeline.predict([c])[0])
+                        p_probs = pipeline.predict_proba([c])[0]
+                        p_neg = float(p_probs[0])
+                        p_pos = float(p_probs[1])
+                        batch_preds.append("Positive" if p_label == 1 else "Negative")
+                        batch_probs.append((p_neg, p_pos))
+                        star_results.append(calculate_stars(p_pos))
+                    else:
+                        batch_preds.append("Unclear / No Words")
+                        batch_probs.append((0.5, 0.5))
+                        star_results.append({
+                            "stars": 3,
+                            "score": 3.0,
+                            "label": "Neutral / Unclear",
+                            "star_icons": "★★★☆☆"
+                        })
+                
+                batch_df['Predicted_Sentiment'] = batch_preds
                 batch_df['Positive_Prob'] = [round(pr[1], 4) for pr in batch_probs]
                 batch_df['Negative_Prob'] = [round(pr[0], 4) for pr in batch_probs]
                 
-                star_results = [calculate_stars(pr[1]) for pr in batch_probs]
                 batch_df['Estimated_Stars'] = [r['stars'] for r in star_results]
                 batch_df['Star_Rating'] = [f"{r['star_icons']} ({r['stars']}/5)" for r in star_results]
                 batch_df['Rating_Score'] = [r['score'] for r in star_results]

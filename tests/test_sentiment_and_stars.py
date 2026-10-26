@@ -112,14 +112,55 @@ def test_fastapi_endpoints():
         resp_batch = client.post("/predict-batch", json={
             "reviews": [
                 "Loved every single second of this masterpiece!",
-                "Unwatchable and boring garbage."
+                "Unwatchable and boring garbage.",
+                "123 456"
             ]
         })
         assert resp_batch.status_code == 200
         data_batch = resp_batch.json()
-        assert data_batch["total_reviews"] == 2
+        assert data_batch["total_reviews"] == 3
         assert data_batch["positive_count"] == 1
         assert data_batch["negative_count"] == 1
         assert "average_stars" in data_batch
         assert 1.0 <= data_batch["average_stars"] <= 5.0
-        assert len(data_batch["predictions"]) == 2
+        assert len(data_batch["predictions"]) == 3
+        assert data_batch["predictions"][2]["sentiment"] == "Unclear / No Words"
+
+
+def test_slang_and_profanity():
+    with TestClient(app) as client:
+        for phrase in ["absolute dogshit", "dogshit", "total bullshit"]:
+            resp = client.post("/predict", json={"review": phrase})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["sentiment"] == "Negative", f"Failed for {phrase}: got {data['sentiment']}"
+            assert data["stars"] == 1, f"Failed stars for {phrase}: got {data['stars']}"
+            assert data["confidence_percentage"] >= 90.0
+
+
+def test_invalid_inputs_rejected():
+    with TestClient(app) as client:
+        # Numbers only
+        resp_num = client.post("/predict", json={"review": "123 456"})
+        assert resp_num.status_code == 400
+
+        # Symbols only
+        resp_sym = client.post("/predict", json={"review": "!@#$%^&*()_+="})
+        assert resp_sym.status_code == 400
+
+        # Punctuation / spaces only
+        resp_punct = client.post("/predict", json={"review": "   ... ??? ---   "})
+        assert resp_punct.status_code == 400
+
+
+def test_rating_shorthands():
+    with TestClient(app) as client:
+        resp_pos = client.post("/predict", json={"review": "10/10"})
+        assert resp_pos.status_code == 200
+        assert resp_pos.json()["sentiment"] == "Positive"
+        assert resp_pos.json()["stars"] == 5
+
+        resp_neg = client.post("/predict", json={"review": "1/10"})
+        assert resp_neg.status_code == 200
+        assert resp_neg.json()["sentiment"] == "Negative"
+        assert resp_neg.json()["stars"] == 1

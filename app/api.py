@@ -125,6 +125,12 @@ def predict_sentiment(request: ReviewRequest):
         raise HTTPException(status_code=400, detail="Review text cannot be empty.")
     
     cleaned = clean_text(raw_text)
+    if not cleaned or len(cleaned.split()) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Review does not contain any recognizable words or sentiment cues. Numbers, symbols, and punctuation alone cannot be evaluated."
+        )
+    
     pred_label = int(pipeline.predict([cleaned])[0])
     probs = pipeline.predict_proba([cleaned])[0]
     
@@ -163,6 +169,22 @@ def predict_batch_sentiment(request: BatchReviewRequest):
     
     for raw_text in request.reviews:
         cleaned = clean_text(raw_text)
+        
+        if not cleaned or len(cleaned.split()) == 0:
+            predictions.append(SentimentResponse(
+                original_review=raw_text,
+                cleaned_review="",
+                sentiment="Unclear / No Words",
+                label=-1,
+                confidence_percentage=50.0,
+                probabilities={"positive": 0.5, "negative": 0.5},
+                stars=3,
+                score_out_of_5=3.0,
+                star_rating="★★★☆☆",
+                rating_label="Neutral / No Words"
+            ))
+            continue
+
         pred_label = int(pipeline.predict([cleaned])[0])
         probs = pipeline.predict_proba([cleaned])[0]
         prob_neg = float(probs[0])

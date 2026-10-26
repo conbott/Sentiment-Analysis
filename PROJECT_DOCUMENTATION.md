@@ -58,9 +58,11 @@ flowchart TD
 
 ### Key Preprocessing Logic:
 1. **HTML Stripping:** Removes `<br />`, `<p>`, and web tags using `re.sub(r'<.*?>', ' ', text)`.
-2. **Contraction Expansion:** Normalizes expressions like `won't` $\rightarrow$ `will not`, `can't` $\rightarrow$ `cannot`, `n't` $\rightarrow$ ` not`, and `'s` $\rightarrow$ ` is`. This explicitly protects negation modifiers from being stripped by downstream punctuation filters.
-3. **Alphabet Isolation:** Keeps only letters `[a-z]` and spaces, removing numbers and symbols.
-4. **Vectorized Application:** Preprocesses all 49,582 rows in **3.81 seconds** using optimized native regex routines.
+2. **Rating Shorthand Resolution:** Maps user ratings like `10/10` $\rightarrow$ `masterpiece perfect` and `1/10` $\rightarrow$ `worst terrible` before digits are removed.
+3. **Lexical & Slang Normalization:** Colloquial internet slang and vulgar intensifiers (`dogshit`, `bullshit`, `shitty`, `sux`) that fall outside benchmark vocabulary are canonicalized into high-weight in-vocabulary synonyms (`terrible crap`, `garbage`, `sucks`), preventing out-of-vocabulary misclassifications.
+4. **Contraction Expansion:** Normalizes expressions like `won't` $\rightarrow$ `will not`, `can't` $\rightarrow$ `cannot`, `n't` $\rightarrow$ ` not`, and `'s` $\rightarrow$ ` is`. This explicitly protects negation modifiers from being stripped by downstream punctuation filters.
+5. **Alphabet Isolation:** Keeps only letters `[a-z]` and spaces, removing stray numbers and symbols.
+6. **Input Validation:** Enforces non-empty semantic token validation so pure numbers (`123 456`) or pure symbols (`!@#$%`) are caught and rejected rather than falling through to the model intercept as false positives.
 
 ---
 
@@ -153,8 +155,11 @@ While binary classification categorizes text as strictly Positive or Negative, r
 The pipeline was validated against common real-world edge cases:
 1. **Negation Sensitivity:** *"The movie was not good at all, despite having a great cast and massive budget"* $\rightarrow$ Correctly classified as **NEGATIVE (77.14% confidence)**.
 2. **Hyperbolic Praise:** *"This was one of the most brilliant and masterfully acted movies I have seen all year!"* $\rightarrow$ Correctly classified as **POSITIVE (90.26% confidence)**.
-3. **Severe Criticism:** *"An absolute waste of time and money. Terrible plot, horrible acting, and boring dialogue"* $\rightarrow$ Correctly classified as **NEGATIVE (99.98% confidence)**.
-4. **Latency Benchmark:** Average inference time per review is **5.2 milliseconds**.
+3. **Colloquial Slang & Compound Profanity:** *"absolute dogshit"* $\rightarrow$ Correctly normalized and classified as **NEGATIVE (99.46% confidence, 1/5 Stars)**.
+4. **Symbol & Number Guardrails:** Inputs like `123 456` or `!@#$%^&*()_+=` are validated and rejected with friendly warnings instead of falling through to model intercept bias.
+5. **Rating Shorthand Handling:** Reviews consisting of `10/10` map to **POSITIVE (99.88% confidence, 5/5 Stars)** and `1/10` map to **NEGATIVE (100.0% confidence, 1/5 Stars)**.
+6. **Severe Criticism:** *"An absolute waste of time and money. Terrible plot, horrible acting, and boring dialogue"* $\rightarrow$ Correctly classified as **NEGATIVE (99.98% confidence)**.
+7. **Latency Benchmark:** Average inference time per review is **5.2 milliseconds**.
 
 ---
 
