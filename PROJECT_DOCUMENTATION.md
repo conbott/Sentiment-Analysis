@@ -122,16 +122,28 @@ The project features a dual deployment interface designed for both machine consu
 * **Pydantic Validation:** Type-checks and validates all incoming payloads.
 * **Endpoints:**
   * `GET /health` — Verifies model availability.
-  * `POST /predict` — Single review prediction returning sentiment, binary label, confidence %, and class probability breakdown.
-  * `POST /predict-batch` — Batch array prediction for bulk review analysis.
+  * `POST /predict` — Single review prediction returning sentiment, binary label, confidence %, probability breakdown, and estimated 1–5 star rating.
+  * `POST /predict-batch` — Batch array prediction with average stars across all reviews.
   * `GET /docs` — Interactive OpenAPI / Swagger UI.
 
-### 8.2 Frontend Web Interface (`Streamlit`)
-* **Interactive Inference:** Real-time sentiment analysis with positive/negative color cards and confidence meters.
-* **Preset Buttons:** Instant testing of positive, negative, and tricky negation sentences.
-* **Batch CSV Processor:** Drag-and-drop CSV file processing with automated summary metrics and CSV download functionality.
+### 8.2 Probabilistic Star Rating Engine
+While binary classification categorizes text as strictly Positive or Negative, real-world consumer platforms (IMDb, Google Reviews, Amazon) operate on 1 to 5 star ratings. The system provides continuous and discrete star rating mapping:
+* **Continuous Rating Formula:**
+  $$\text{Rating Score} = 1.0 + 4.0 \times P(\text{Positive})$$
+  Ranges strictly from $1.0 / 5.0$ ($P=0$) to $5.0 / 5.0$ ($P=1$), with $3.0 / 5.0$ reflecting neutral balance ($P=0.5$).
+* **Threshold Calibration:**
+  * **5 Stars ($\text{Score} \ge 4.5, P \ge 87.5\%$):** *Excellent / Masterpiece* &mdash; Overwhelmingly positive review.
+  * **4 Stars ($3.5 \le \text{Score} < 4.5, 62.5\% \le P < 87.5\%$):** *Good / Enjoyable* &mdash; Strongly favorable review.
+  * **3 Stars ($2.5 \le \text{Score} < 3.5, 37.5\% \le P < 62.5\%$):** *Average / Mixed* &mdash; Mixed sentiment, balanced emotional polarity.
+  * **2 Stars ($1.5 \le \text{Score} < 2.5, 12.5\% \le P < 37.5\%$):** *Poor / Disappointing* &mdash; Substantial negative reaction.
+  * **1 Star ($\text{Score} < 1.5, P < 12.5\%$):** *Very Poor / Terrible* &mdash; Severe negative criticism.
 
-### 8.3 Containerization (`Docker`)
+### 8.3 Frontend Web Interface (`Streamlit`)
+* **Interactive Inference:** Real-time sentiment analysis with positive/negative color cards, gold star visual cards (`★★★★☆`), and probability meters.
+* **Preset Buttons:** Instant testing of positive, negative, and tricky negation sentences.
+* **Batch CSV Processor:** Drag-and-drop CSV file processing with automated summary metrics (including Average Star Rating across the batch), table previews, and CSV download.
+
+### 8.4 Containerization (`Docker`)
 * Standardized multi-stage Dockerfile packaging Python 3.11, pinned dependencies, models, and application code into a standalone container exposing ports 8000 (API) and 8501 (UI).
 
 ---

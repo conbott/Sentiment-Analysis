@@ -3,35 +3,29 @@ FastAPI Backend for IMDb Sentiment Analysis
 Provides REST API endpoints for real-time and batch sentiment predictions.
 """
 
+import os
+import sys
+import re
+from typing import List, Dict, Any
+from contextlib import asynccontextmanager
+
+# Resolve Model and Project Path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Dict
-from contextlib import asynccontextmanager
 import joblib
-import os
-import re
 
-# Resolve Model Path
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from app.utils import clean_text, calculate_stars
+except ModuleNotFoundError:
+    from utils import clean_text, calculate_stars
+
 MODEL_PATH = os.path.join(BASE_DIR, "models", "sentiment_pipeline.joblib")
 pipeline = None
-
-
-def clean_text(text: str) -> str:
-    """Preprocesses input text to match training pipeline format."""
-    text = re.sub(r'<.*?>', ' ', text)
-    text = re.sub(r'https?://\S+|www\.\S+', ' ', text)
-    contractions = {
-        r"won\'t": "will not", r"can\'t": "cannot", r"n\'t": " not",
-        r"\'re": " are", r"\'s": " is", r"\'d": " would",
-        r"\'ll": " will", r"\'t": " not", r"\'ve": " have", r"\'m": " am"
-    }
-    for contraction, replacement in contractions.items():
-        text = re.sub(contraction, replacement, text)
-    text = text.lower()
-    text = re.sub(r'[^a-z\s]', ' ', text)
-    return re.sub(r'\s+', ' ', text).strip()
 
 
 @asynccontextmanager
@@ -68,17 +62,17 @@ class ReviewRequest(BaseModel):
     review: str = Field(
         ...,
         min_length=1,
-        example="The cinematography was breathtaking and the performances were deeply moving!"
+        examples=["The cinematography was breathtaking and the performances were deeply moving!"]
     )
 
 class BatchReviewRequest(BaseModel):
     reviews: List[str] = Field(
         ...,
-        min_items=1,
-        example=[
+        min_length=1,
+        examples=[[
             "An absolute masterpiece of modern cinema!",
             "Horrible pacing, terrible acting, and a complete waste of time."
-        ]
+        ]]
     )
 
 class SentimentResponse(BaseModel):
@@ -88,11 +82,16 @@ class SentimentResponse(BaseModel):
     label: int
     confidence_percentage: float
     probabilities: Dict[str, float]
+    stars: int = Field(..., description="Estimated star rating from 1 to 5")
+    score_out_of_5: float = Field(..., description="Continuous rating score out of 5.0")
+    star_rating: str = Field(..., description="Visual star glyph representation e.g. ★★★★☆")
+    rating_label: str = Field(..., description="Qualitative rating description (e.g. Excellent, Good, Average / Mixed, Poor, Very Poor)")
 
 class BatchSentimentResponse(BaseModel):
     total_reviews: int
     positive_count: int
     negative_count: int
+    average_stars: float = Field(..., description="Average rating score out of 5.0 across all reviews")
     predictions: List[SentimentResponse]
 
 
@@ -101,7 +100,7 @@ class BatchSentimentResponse(BaseModel):
 def root():
     return {
         "message": "Welcome to the IMDb Sentiment Analysis API!",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "docs_url": "/docs",
         "health_check": "/health"
     }
@@ -134,6 +133,7 @@ def predict_sentiment(request: ReviewRequest):
     
     sentiment = "Positive" if pred_label == 1 else "Negative"
     confidence = (prob_pos if pred_label == 1 else prob_neg) * 100
+    star_info = calculate_stars(prob_pos)
     
     return SentimentResponse(
         original_review=raw_text,
@@ -144,7 +144,11 @@ def predict_sentiment(request: ReviewRequest):
         probabilities={
             "positive": round(prob_pos, 4),
             "negative": round(prob_neg, 4)
-        }
+        },
+        stars=star_info["stars"],
+        score_out_of_5=star_info["score"],
+        star_rating=star_info["star_icons"],
+        rating_label=star_info["label"]
     )
 
 
@@ -165,6 +169,7 @@ def predict_batch_sentiment(request: BatchReviewRequest):
         prob_pos = float(probs[1])
         sentiment = "Positive" if pred_label == 1 else "Negative"
         confidence = (prob_pos if pred_label == 1 else prob_neg) * 100
+        star_info = calculate_stars(prob_pos)
         
         if pred_label == 1:
             pos_count += 1
@@ -180,13 +185,20 @@ def predict_batch_sentiment(request: BatchReviewRequest):
             probabilities={
                 "positive": round(prob_pos, 4),
                 "negative": round(prob_neg, 4)
-            }
+            },
+            stars=star_info["stars"],
+            score_out_of_5=star_info["score"],
+            star_rating=star_info["star_icons"],
+            rating_label=star_info["label"]
         ))
-        
+    
+    avg_stars = round(sum(p.score_out_of_5 for p in predictions) / len(predictions), 2) if predictions else 0.0
+
     return BatchSentimentResponse(
         total_reviews=len(predictions),
         positive_count=pos_count,
         negative_count=neg_count,
+        average_stars=avg_stars,
         predictions=predictions
     )
 

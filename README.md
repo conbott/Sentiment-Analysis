@@ -18,8 +18,9 @@ An industrial-grade, end-to-end Natural Language Processing (NLP) binary classif
 - **Test Accuracy:** 90.92%
 - **ROC-AUC Score:** 0.968
 - **Model Pipeline:** Sublinear TF-IDF (1, 2 n-grams, 25,000 features) + Logistic Regression (C=2.0)
+- **Star Rating System:** Continuous probabilistic mapping to 1–5 star ratings ($\text{Score} = 1.0 + 4.0 \times P(\text{Positive})$)
 - **Backend API:** FastAPI with automated Swagger documentation
-- **Frontend Web UI:** Streamlit with real-time inference, sample presets, and CSV batch processing
+- **Frontend Web UI:** Streamlit with real-time inference, star rating cards, sample presets, and CSV batch processing
 - **Containerization:** Docker-ready configuration
 
 ---
@@ -114,7 +115,11 @@ curl -X 'POST' \
   "probabilities": {
     "positive": 0.9604,
     "negative": 0.0396
-  }
+  },
+  "stars": 5,
+  "score_out_of_5": 4.8,
+  "star_rating": "★★★★★",
+  "rating_label": "Excellent"
 }
 ```
 
